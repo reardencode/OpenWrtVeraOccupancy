@@ -1,0 +1,133 @@
+#!/bin/sh
+
+# Author: reardencode <freedom@reardencode.com>
+
+# This script sets Multiswitch states based on the status of servers
+# on your network as well as the presence of device MAC addresses.
+
+# You must use a separate Multiswitch for servers and one for MACs
+
+# The script assumes that your devices and hosts are assigned to 
+# switches on their respective multiswitches in order, starting at 1
+
+# Instructions:
+# * Set the variables at the top of the script to match your setup
+# * Put this in /jffs/scripts or /usr/bin or wherever on your router
+# * chmod +x /path/to/this/script
+# * 
+
+iw_devices="wlan0 wlan1"
+macs="<mac0> <mac1>"
+mac_switch_device=<DeviceNum>
+hosts="<host0> <host1>"
+host_switch_device=<DeviceNum>
+
+vera_ip=<ip>
+
+# How frequently to poll devices / hosts
+poll_seconds=1
+# How long a device may be disconnected before its switch is set to 0
+timeout_seconds=60
+# How long between refreshes when host/device state isn't changing
+refresh_seconds=300
+
+base_query="id=lu_action&serviceId=urn:dcineco-com:serviceId:MSwitch1"
+base_url="http://192.168.3.100:3480/data_request?$base_query"
+
+set_state() {
+    local host_or_mac=$1
+    local switch=$2
+    local item=$3
+    local new_state=$4
+    local old_state=$5
+    eval local device=\$${host_or_mac}_switch_device
+    local params="DeviceNum=$device&action=SetStatus$switch&newStatus$switch=$new_state"
+
+    if [ $new_state -ne $old_state ]; then
+        echo "Setting $device.$switch ($item) to $new_state"
+        if wget -O - "$base_url&$params" > /dev/null 2>&1; then
+            eval ${host_or_mac}_state_$switch=$new_state
+        fi
+    fi
+}
+
+poll_mac() {
+    for iw_device in $iw_devices; do
+        if iw dev $iw_device station get $1 > /dev/null 2>&1; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+poll_host() {
+    ping -w 1 -c 1 $1 > /dev/null 2>&1
+    return $?
+}
+
+poll_states() {
+    local host_or_mac=$1
+    eval local items=\$${host_or_mac}s
+    local n=0
+
+    for item in $items; do
+        n=$((n+1))
+        eval state=\$${host_or_mac}_state_$n
+        if eval poll_$host_or_mac $item; then
+            set_state $host_or_mac $device $n $item 1 $state
+            eval ${host_or_mac}_count_$n=$timeout_seconds
+        else
+            eval count=\$${host_or_mac}_count_$n
+            if [ $count -le 0 ]; then
+                set_state $host_or_mac $n $item 0 $state
+            else
+                eval ${host_or_mac}_count_$n=$((count-poll_seconds))
+            fi
+        fi
+    done
+}
+
+init_counts() {
+    local host_or_mac=$1
+    eval local items=\$${host_or_mac}s
+    local n=0
+
+    for item in $items; do
+        n=$((n+1))
+        eval ${host_or_mac}_count_$n=$timeout_seconds
+    done
+}
+
+clear_states() {
+    local host_or_mac=$1
+    eval local items=\$${host_or_mac}s
+    local n=0
+
+    for item in $items; do
+        n=$((n+1))
+        eval ${host_or_mac}_state_$n=-1
+    done
+}
+
+main() {
+    local refresh=0
+
+    init_counts host
+    init_counts mac
+
+    while true; do
+        if [ $refresh -le 0 ]; then
+            clear_states host
+            clear_states mac
+            refresh=$refresh_seconds
+        fi
+
+        poll_states host
+        poll_states mac
+
+        sleep $poll_seconds
+        refresh=$((refresh-poll_seconds))
+    done
+}
+
+main

@@ -29,7 +29,7 @@ vera_ip=<ip>
 poll_seconds=1
 # How long a device may be disconnected before its switch is set to 0
 timeout_seconds=60
-# How long between refreshes when host/device state isn't changing
+# How long between refreshing switch states with same host/device
 refresh_seconds=300
 
 base_query="id=lu_action&serviceId=urn:dcineco-com:serviceId:MSwitch1"

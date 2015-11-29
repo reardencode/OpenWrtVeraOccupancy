@@ -4,10 +4,8 @@
 # This script sets Multiswitch states based on the status of servers
 # on your network as well as the presence of device MAC addresses.
 
-# You must use a separate Multiswitch for servers and one for MACs
-
-# The script assumes that your devices and hosts are assigned to 
-# switches on their respective multiswitches in order, starting at 1
+# You can monitor basically any combination of hosts and MACs, as
+# long as you assign them to unique multiswitch switches.
 
 # Instructions:
 # * Set the variables at the top of the script to match your setup
